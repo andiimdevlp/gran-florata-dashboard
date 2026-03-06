@@ -1,4 +1,3 @@
-<<<<<<< HEAD
 # gran-florata-dashboard
 Dashboard financeiro para condomínio residencial
 =======
@@ -200,4 +199,3 @@ Para dúvidas sobre o formato do arquivo ou uso da aplicação, consulte os exem
 ---
 
 **Desenvolvido com ❤️ para Gran Florata**
->>>>>>> ec88101 (Initial commit: Dashboard financeiro Gran Florata)
