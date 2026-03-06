@@ -1,0 +1,16 @@
+node_modules/
+.DS_Store
+*.log
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.env
+diagnostico.js
+remove-comments.js
+DEBUG.md
+ORDENACAO.md
+ANALISE-PROBLEMA.md
+teste-parser.html
+Arrecadação*.txt
