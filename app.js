@@ -926,6 +926,44 @@ function renderCategoryComparison(month) {
     `;
 }
 
+async function loadSampleData() {
+    const sampleFiles = [
+        'sample-data/Arrecadação 2025 - Jul.txt',
+        'sample-data/Arrecadação 2025 - Ago.txt',
+        'sample-data/Arrecadação 2025 - Set.txt',
+        'sample-data/Arrecadação 2025 - Out.txt',
+        'sample-data/Arrecadação 2025 - Nov.txt',
+        'sample-data/Arrecadação 2025 - Dez.txt',
+        'sample-data/Arrecadação 2026 - Jan.txt',
+        'sample-data/Arrecadação 2026 - Fev.txt',
+        'sample-data/Arrecadação 2026 - Mar.txt'
+    ];
+
+    console.log('📂 Carregando dados de exemplo...');
+    
+    let loadedCount = 0;
+    for (const filePath of sampleFiles) {
+        try {
+            const response = await fetch(filePath);
+            if (response.ok) {
+                const text = await response.text();
+                const monthData = parseFinancialReport(text);
+                if (monthData) {
+                    AppState.addMonth(monthData);
+                    loadedCount++;
+                }
+            }
+        } catch (error) {
+            console.warn(`⚠️ Não foi possível carregar ${filePath}`);
+        }
+    }
+    
+    if (loadedCount > 0) {
+        console.log(`✅ ${loadedCount} arquivos de exemplo carregados`);
+        updateDashboard();
+    }
+}
+
 function handleFileUpload(event) {
     const files = event.target.files;
     let filesProcessed = 0;
@@ -1085,12 +1123,12 @@ document.addEventListener('DOMContentLoaded', function() {
         });
         const latest = AppState.getLatestMonth();
         console.log(`\n🎯 O dashboard exibirá: ${latest.month}/${latest.year} (ÚLTIMO MÊS)`);
+        console.log('═'.repeat(60) + '\n');
+        updateDashboard();
     } else {
         console.log('ℹ️  Nenhum dado salvo encontrado.');
-        console.log('📁 Clique em "Importar Dados" para adicionar seus arquivos .txt');
+        console.log('📂 Carregando dados de exemplo para demonstração...');
+        console.log('═'.repeat(60) + '\n');
+        loadSampleData();
     }
-
-    console.log('═'.repeat(60) + '\n');
-
-    updateDashboard();
 });
