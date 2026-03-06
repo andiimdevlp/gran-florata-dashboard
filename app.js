@@ -1,6 +1,7 @@
 const AppState = {
     months: [],
     currentMonth: null,
+    selectedMonthFilter: null,
     charts: {},
 
     addMonth(monthData) {
@@ -51,6 +52,24 @@ const AppState = {
     getAllMonthsOrdered() {
 
         return [...this.months].sort((a, b) => new Date(a.date) - new Date(b.date));
+    },
+
+    getDisplayMonth() {
+        if (this.selectedMonthFilter) {
+            return this.getMonth(this.selectedMonthFilter);
+        }
+        return this.getLatestMonth();
+    },
+
+    getDisplayPreviousMonth() {
+        const displayMonth = this.getDisplayMonth();
+        if (!displayMonth) return null;
+        
+        const displayIndex = this.months.findIndex(m => m.key === displayMonth.key);
+        if (displayIndex > 0) {
+            return this.months[displayIndex - 1];
+        }
+        return null;
     },
 
     save() {
@@ -400,7 +419,7 @@ function renderDistributionChart() {
         AppState.charts.distribution.destroy();
     }
 
-    const latestMonth = AppState.getLatestMonth();
+    const latestMonth = AppState.getDisplayMonth();
     if (!latestMonth) {
         AppState.charts.distribution = null;
         return;
@@ -460,7 +479,7 @@ function renderTopExpensesChart() {
         AppState.charts.topExpenses.destroy();
     }
 
-    const latestMonth = AppState.getLatestMonth();
+    const latestMonth = AppState.getDisplayMonth();
     if (!latestMonth) {
         AppState.charts.topExpenses = null;
         return;
@@ -621,8 +640,8 @@ function renderStackedChart() {
 }
 
 function updateDashboard() {
-    const latestMonth = AppState.getLatestMonth();
-    const previousMonth = AppState.getPreviousMonth();
+    const latestMonth = AppState.getDisplayMonth();
+    const previousMonth = AppState.getDisplayPreviousMonth();
 
     console.log('\n🔄 ATUALIZANDO DASHBOARD...');
     console.log('═'.repeat(60));
@@ -717,6 +736,10 @@ function updateMonthSelector() {
     selector.innerHTML = '<option value="">Todos os meses</option>' + options;
     compareMonth1.innerHTML = '<option value="">Selecione...</option>' + options;
     compareMonth2.innerHTML = '<option value="">Selecione...</option>' + options;
+    
+    if (AppState.selectedMonthFilter) {
+        selector.value = AppState.selectedMonthFilter;
+    }
 }
 
 function updateLoadedMonthsBadges() {
@@ -731,7 +754,7 @@ function updateLoadedMonthsBadges() {
 
 function renderCategoriesView() {
     const container = document.getElementById('categoriesGrid');
-    const latestMonth = AppState.getLatestMonth();
+    const latestMonth = AppState.getDisplayMonth();
 
     if (!latestMonth) {
         container.innerHTML = '<div style="grid-column: 1 / -1; text-align: center; padding: 3rem; color: var(--text-muted);"><h3 style="font-size: 1.5rem; margin-bottom: 1rem;">Nenhum dado carregado</h3><p>Clique em "Importar Dados" para começar</p></div>';
@@ -760,7 +783,7 @@ function showCategoryDetail(categoryName) {
     const modalTitle = document.getElementById('modalTitle');
     const categoryItems = document.getElementById('categoryItems');
 
-    const latestMonth = AppState.getLatestMonth();
+    const latestMonth = AppState.getDisplayMonth();
     if (!latestMonth) return;
 
     modalTitle.textContent = categoryName;
@@ -1042,6 +1065,11 @@ document.addEventListener('DOMContentLoaded', function() {
 
     document.getElementById('compareMonth1').addEventListener('change', renderComparisonView);
     document.getElementById('compareMonth2').addEventListener('change', renderComparisonView);
+    
+    document.getElementById('monthFilter').addEventListener('change', function(e) {
+        AppState.selectedMonthFilter = e.target.value || null;
+        updateDashboard();
+    });
 
     console.log('\n🚀 INICIALIZANDO GRAN FLORATA DASHBOARD...');
     console.log('═'.repeat(60));
