@@ -1070,10 +1070,38 @@ function forceReorder() {
     updateDashboard();
 }
 
+function initMobileMenu() {
+    const menuToggle = document.getElementById('mobileMenuToggle');
+    const sidebar = document.querySelector('.sidebar');
+    
+    if (!menuToggle || !sidebar) return;
+    
+    menuToggle.addEventListener('click', () => {
+        sidebar.classList.toggle('active');
+    });
+    
+    sidebar.addEventListener('click', (e) => {
+        if (e.target === sidebar || e.target.closest('.nav-item')) {
+            sidebar.classList.remove('active');
+        }
+    });
+    
+    document.addEventListener('click', (e) => {
+        if (sidebar.classList.contains('active') && 
+            !sidebar.contains(e.target) && 
+            e.target !== menuToggle &&
+            !menuToggle.contains(e.target)) {
+            sidebar.classList.remove('active');
+        }
+    });
+}
+
 window.debugState = debugState;
 window.forceReorder = forceReorder;
 
 document.addEventListener('DOMContentLoaded', function() {
+    
+    initMobileMenu();
 
     document.getElementById('uploadBtn').addEventListener('click', () => {
         document.getElementById('fileInput').click();
