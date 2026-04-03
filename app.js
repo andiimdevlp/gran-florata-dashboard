@@ -936,7 +936,8 @@ async function loadSampleData() {
         'sample-data/Arrecadação 2025 - Dez.txt',
         'sample-data/Arrecadação 2026 - Jan.txt',
         'sample-data/Arrecadação 2026 - Fev.txt',
-        'sample-data/Arrecadação 2026 - Mar.txt'
+        'sample-data/Arrecadação 2026 - Mar.txt',
+        'sample-data/Arrecadação 2026 - Abr.txt'
     ];
 
     console.log('📂 Carregando dados de exemplo...');
