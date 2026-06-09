@@ -43,6 +43,15 @@
                     </svg>
                     <span>Categorias</span>
                 </a>
+                <a href="#" class="nav-item" data-view="charges">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <circle cx="11" cy="11" r="8"></circle>
+                        <path d="m21 21-4.3-4.3"></path>
+                        <path d="M8 11h6"></path>
+                        <path d="M11 8v6"></path>
+                    </svg>
+                    <span>Cobranças</span>
+                </a>
                 <a href="#" class="nav-item" data-view="comparison">
                     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                         <rect x="3" y="8" width="4" height="12"></rect>
@@ -89,9 +98,33 @@
                     <p class="page-subtitle">Visão Geral Financeira</p>
                 </div>
                 <div class="header-right">
-                    <select id="monthFilter" class="month-selector">
-                        <option value="">Todos os meses</option>
-                    </select>
+                    <div class="period-filter">
+                        <div class="filter-field focus-month">
+                            <label for="monthFilter">Mês em foco</label>
+                            <select id="monthFilter" class="month-selector">
+                                <option value="">Último do período</option>
+                            </select>
+                        </div>
+                        <div class="filter-field">
+                            <label for="periodStart">De</label>
+                            <select id="periodStart" class="month-selector">
+                                <option value="">Início</option>
+                            </select>
+                        </div>
+                        <div class="filter-field">
+                            <label for="periodEnd">Até</label>
+                            <select id="periodEnd" class="month-selector">
+                                <option value="">Fim</option>
+                            </select>
+                        </div>
+                        <button class="btn-icon" id="clearPeriodBtn" type="button" title="Limpar período" aria-label="Limpar período">
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M3 6h18"></path>
+                                <path d="M8 6V4h8v2"></path>
+                                <path d="M19 6l-1 14H6L5 6"></path>
+                            </svg>
+                        </button>
+                    </div>
                     <div class="loaded-months" id="loadedMonths"></div>
                 </div>
             </header>
@@ -193,6 +226,38 @@
 
             <div id="categoriesView" class="view-container">
                 <div class="categories-grid" id="categoriesGrid"></div>
+            </div>
+
+            <div id="chargesView" class="view-container">
+                <div class="charge-workbench">
+                    <div class="card charge-controls">
+                        <div class="charge-field search-field">
+                            <label for="chargeSearch">Buscar cobrança</label>
+                            <input id="chargeSearch" class="text-input" list="chargeSuggestions" type="search" placeholder="Água, energia, honorário jurídico...">
+                            <datalist id="chargeSuggestions"></datalist>
+                        </div>
+                        <div class="charge-field">
+                            <label for="chargeCategoryFilter">Categoria</label>
+                            <select id="chargeCategoryFilter" class="month-selector">
+                                <option value="">Todas as categorias</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <div class="charge-summary" id="chargeSummary"></div>
+
+                    <div class="card chart-card full-width">
+                        <div class="card-header">
+                            <h3 class="chart-title">Comparação mensal por cobrança</h3>
+                        </div>
+                        <div class="chart-container large">
+                            <canvas id="chargeComparisonChart"></canvas>
+                        </div>
+                    </div>
+
+                    <div id="chargeComparisonTable"></div>
+                    <div id="chargeDetails"></div>
+                </div>
             </div>
 
             <div id="comparisonView" class="view-container">

@@ -2,9 +2,15 @@ const AppState = {
     months: [],
     currentMonth: null,
     selectedMonthFilter: null,
+    periodStartKey: null,
+    periodEndKey: null,
+    chargeSearch: '',
+    chargeCategoryFilter: '',
     charts: {},
 
     addMonth(monthData) {
+        monthData = normalizeMonthData(monthData);
+
         const existing = this.months.findIndex(m => m.key === monthData.key);
         if (existing !== -1) {
             console.log(`ℹ️ Atualizando mês existente: ${monthData.month}/${monthData.year}`);
@@ -54,20 +60,40 @@ const AppState = {
         return [...this.months].sort((a, b) => new Date(a.date) - new Date(b.date));
     },
 
+    getFilteredMonths() {
+        const orderedMonths = this.getAllMonthsOrdered();
+        if (orderedMonths.length === 0) return [];
+
+        const startMonth = this.periodStartKey ? this.getMonth(this.periodStartKey) : null;
+        const endMonth = this.periodEndKey ? this.getMonth(this.periodEndKey) : null;
+        const startDate = startMonth ? new Date(startMonth.date) : new Date(orderedMonths[0].date);
+        const endDate = endMonth ? new Date(endMonth.date) : new Date(orderedMonths[orderedMonths.length - 1].date);
+        const rangeStart = startDate <= endDate ? startDate : endDate;
+        const rangeEnd = startDate <= endDate ? endDate : startDate;
+
+        return orderedMonths.filter(month => {
+            const monthDate = new Date(month.date);
+            return monthDate >= rangeStart && monthDate <= rangeEnd;
+        });
+    },
+
     getDisplayMonth() {
         if (this.selectedMonthFilter) {
             return this.getMonth(this.selectedMonthFilter);
         }
-        return this.getLatestMonth();
+
+        const filteredMonths = this.getFilteredMonths();
+        return filteredMonths.length > 0 ? filteredMonths[filteredMonths.length - 1] : this.getLatestMonth();
     },
 
     getDisplayPreviousMonth() {
         const displayMonth = this.getDisplayMonth();
         if (!displayMonth) return null;
         
-        const displayIndex = this.months.findIndex(m => m.key === displayMonth.key);
+        const filteredMonths = this.getFilteredMonths();
+        const displayIndex = filteredMonths.findIndex(m => m.key === displayMonth.key);
         if (displayIndex > 0) {
-            return this.months[displayIndex - 1];
+            return filteredMonths[displayIndex - 1];
         }
         return null;
     },
@@ -84,7 +110,7 @@ const AppState = {
         try {
             const saved = localStorage.getItem('granFlorata_months');
             if (saved) {
-                this.months = JSON.parse(saved);
+                this.months = JSON.parse(saved).map(month => normalizeMonthData(month));
 
                 this.months.forEach(month => {
                     if (typeof month.date === 'string') {
@@ -104,9 +130,66 @@ const AppState = {
 
     clear() {
         this.months = [];
+        this.selectedMonthFilter = null;
+        this.periodStartKey = null;
+        this.periodEndKey = null;
+        this.chargeSearch = '';
+        this.chargeCategoryFilter = '';
         localStorage.removeItem('granFlorata_months');
     }
 };
+
+const standardCategoryNames = [
+    'ENCARGOS SOCIAIS',
+    'CONCESSIONÁRIAS',
+    'ADMINISTRAÇÃO',
+    'MANUTENÇÃO E CONSERVAÇÃO',
+    'DESPESAS BANCARIAS',
+    'OUTROS VALORES INDIVIDUAIS',
+    'OUTROS'
+];
+
+function createCategoryBuckets() {
+    return Object.fromEntries(standardCategoryNames.map(category => [category, []]));
+}
+
+function recalculateCategoryTotals(categories) {
+    const categoryTotals = {};
+    for (const [category, items] of Object.entries(categories)) {
+        if (Array.isArray(items) && items.length > 0) {
+            categoryTotals[category] = items.reduce((sum, item) => sum + (Number(item.value) || 0), 0);
+        }
+    }
+    return categoryTotals;
+}
+
+function normalizeMonthData(monthData) {
+    if (!monthData || !monthData.categories) return monthData;
+
+    const normalizedCategories = createCategoryBuckets();
+
+    Object.entries(monthData.categories).forEach(([category, items]) => {
+        if (!Array.isArray(items)) return;
+
+        items.forEach(item => {
+            const group = getChargeGroupInfo(item.name);
+            const targetCategory = ['agua-saneago', 'energia-equatorial', 'gas-coletivo'].includes(group.key)
+                ? 'CONCESSIONÁRIAS'
+                : (standardCategoryNames.includes(category) ? category : 'OUTROS');
+
+            normalizedCategories[targetCategory].push({
+                name: item.name,
+                value: Number(item.value) || 0
+            });
+        });
+    });
+
+    return {
+        ...monthData,
+        categories: normalizedCategories,
+        categoryTotals: recalculateCategoryTotals(normalizedCategories)
+    };
+}
 
 function parseFinancialReport(text) {
     const lines = text.split('\n').map(line => line.trim()).filter(line => line);
@@ -139,15 +222,7 @@ function parseFinancialReport(text) {
         }
     }
 
-    const categories = {
-        'ENCARGOS SOCIAIS': [],
-        'CONCESSIONÁRIAS': [],
-        'ADMINISTRAÇÃO': [],
-        'MANUTENÇÃO E CONSERVAÇÃO': [],
-        'DESPESAS BANCARIAS': [],
-        'OUTROS VALORES INDIVIDUAIS': [],
-        'OUTROS': []
-    };
+    const categories = createCategoryBuckets();
 
     let currentCategory = null;
     let totalGeneral = 0;
@@ -177,9 +252,10 @@ function parseFinancialReport(text) {
             !line.includes('FUNDO DE RESERVA') &&
             !line.includes('VALOR DA TAXA') &&
             !line.includes('Previsão') &&
-            !knownCategories.includes(line) &&
-            nextLine.startsWith('R$')) {
+            !knownCategories.includes(line.toUpperCase()) &&
+            !nextLine.startsWith('R$')) {
             currentCategory = 'OUTROS';
+            continue;
         }
 
         if (currentCategory && nextLine.startsWith('R$') && !line.toLowerCase().includes('total')) {
@@ -218,12 +294,7 @@ function parseFinancialReport(text) {
         }
     }
 
-    const categoryTotals = {};
-    for (const [category, items] of Object.entries(categories)) {
-        if (items.length > 0) {
-            categoryTotals[category] = items.reduce((sum, item) => sum + item.value, 0);
-        }
-    }
+    const categoryTotals = recalculateCategoryTotals(categories);
 
     return {
         month,
@@ -256,6 +327,266 @@ function formatCurrency(value) {
 
 function formatMonthYear(month, year) {
     return `${month} ${year}`;
+}
+
+function escapeHtml(value) {
+    return String(value ?? '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#039;');
+}
+
+function normalizeText(value) {
+    return String(value ?? '')
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim();
+}
+
+function matchesNormalizedQuery(searchText, normalizedQuery) {
+    if (!normalizedQuery) return true;
+    if (searchText.includes(normalizedQuery)) return true;
+
+    const ignoredTokens = new Set(['de', 'da', 'do', 'das', 'dos', 'e']);
+    const tokens = normalizedQuery
+        .split(' ')
+        .filter(token => token.length > 1 && !ignoredTokens.has(token));
+
+    return tokens.every(token => {
+        const singularToken = token.endsWith('s') ? token.slice(0, -1) : token;
+        return searchText.includes(token) || searchText.includes(singularToken);
+    });
+}
+
+function cleanChargeLabel(value) {
+    return String(value ?? '')
+        .replace(/\s*-\s*NF\s*\d+/gi, '')
+        .replace(/\bNF\s*\d+\b/gi, '')
+        .replace(/\bRef\.?\s*[\d./-]+/gi, '')
+        .replace(/\bparc\.?\s*[\d/.-]+/gi, '')
+        .replace(/\s*\((?:[^()]*(?:ref|parc|item)[^()]*)\)/gi, '')
+        .replace(/\s{2,}/g, ' ')
+        .replace(/\s+-\s*$/g, '')
+        .trim();
+}
+
+const chargeGroupRules = [
+    {
+        key: 'agua-saneago',
+        label: 'Água / SANEAGO',
+        matchTerms: ['saneago', 'agua coletiva'],
+        terms: ['agua', 'saneago', 'agua coletiva']
+    },
+    {
+        key: 'energia-equatorial',
+        label: 'Energia / EQUATORIAL',
+        matchTerms: ['equatorial'],
+        terms: ['energia', 'equatorial', 'eletricidade', 'luz', 'conta de luz']
+    },
+    {
+        key: 'gas-coletivo',
+        label: 'Gás coletivo',
+        matchTerms: ['gas coletiva', 'gas coletivo'],
+        terms: ['gas', 'gas coletiva', 'gas coletivo']
+    },
+    {
+        key: 'honorario-juridico',
+        label: 'Honorário jurídico / advocacia',
+        terms: ['honorario juridico', 'juridico', 'advogado', 'advogados', 'advocacia']
+    },
+    {
+        key: 'honorario-contabil',
+        label: 'Honorário contábil',
+        terms: ['honorario contabil', 'contabil', 'contabilidade']
+    },
+    {
+        key: 'honorario-sindica',
+        label: 'Honorário síndica',
+        terms: ['honorario sindica', 'sindica', 'sindico']
+    },
+    {
+        key: 'limpeza',
+        label: 'Prestação de limpeza',
+        terms: ['limpeza', 'alfa solucoes', 'prestadora de servicos limpeza']
+    },
+    {
+        key: 'elevadores',
+        label: 'Manutenção de elevadores',
+        terms: ['elevador', 'elevadores', 'otis']
+    },
+    {
+        key: 'seguranca',
+        label: 'Segurança / câmeras / acesso',
+        terms: ['seguranca', 'camera', 'cameras', 'cerca eletrica', 'acesso', 'federal seguranca']
+    },
+    {
+        key: 'piscina',
+        label: 'Manutenção da piscina',
+        terms: ['piscina']
+    },
+    {
+        key: 'seguro-predial',
+        label: 'Seguro predial',
+        terms: ['seguro predial', 'hdi']
+    },
+    {
+        key: 'condobem',
+        label: 'Comissão CondoBem',
+        terms: ['condobem', 'antecipacao de receita', 'liquidacao de boletos']
+    }
+];
+
+function getChargeGroupInfo(name) {
+    const normalizedName = normalizeText(name);
+    const matchedRule = chargeGroupRules.find(rule =>
+        (rule.matchTerms || rule.terms).some(term => normalizedName.includes(normalizeText(term)))
+    );
+
+    if (matchedRule) {
+        return matchedRule;
+    }
+
+    const genericKey = normalizedName
+        .replace(/\b(nf|ref|referente|parc|parcela|item)\b/g, ' ')
+        .replace(/\b\d{1,2}[./-]\d{2,4}\b/g, ' ')
+        .replace(/\b\d+\/\d+\b/g, ' ')
+        .replace(/\b\d+\b/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim();
+
+    return {
+        key: `item-${genericKey || normalizedName || 'sem-nome'}`,
+        label: cleanChargeLabel(name) || name || 'Cobrança sem nome',
+        terms: []
+    };
+}
+
+function getMonthLabel(month) {
+    return month ? `${month.month} ${month.year}` : '';
+}
+
+function getPeriodLabel(months) {
+    if (!months || months.length === 0) return 'Nenhum mês';
+    if (months.length === 1) return getMonthLabel(months[0]);
+    return `${getMonthLabel(months[0])} até ${getMonthLabel(months[months.length - 1])}`;
+}
+
+function getChargeItemsForMonth(month) {
+    if (!month || !month.categories) return [];
+
+    return Object.entries(month.categories).flatMap(([category, items]) => {
+        if (!Array.isArray(items)) return [];
+
+        return items.map(item => ({
+            monthKey: month.key,
+            monthLabel: getMonthLabel(month),
+            monthDate: new Date(month.date),
+            category,
+            name: item.name,
+            value: Number(item.value) || 0
+        }));
+    });
+}
+
+function getAvailableChargeCategories() {
+    const categories = new Set();
+
+    AppState.months.forEach(month => {
+        Object.entries(month.categories || {}).forEach(([category, items]) => {
+            if (Array.isArray(items) && items.length > 0) {
+                categories.add(category);
+            }
+        });
+    });
+
+    return [...categories].sort((a, b) => a.localeCompare(b, 'pt-BR'));
+}
+
+function getChargeSuggestions() {
+    const suggestions = new Map();
+
+    chargeGroupRules.forEach(rule => {
+        suggestions.set(rule.label, rule.label);
+    });
+
+    AppState.months.forEach(month => {
+        getChargeItemsForMonth(month).forEach(item => {
+            const group = getChargeGroupInfo(item.name);
+            suggestions.set(group.label, group.label);
+            suggestions.set(item.name, item.name);
+        });
+    });
+
+    return [...suggestions.values()].sort((a, b) => a.localeCompare(b, 'pt-BR'));
+}
+
+function getChargeGroups(query = AppState.chargeSearch, categoryFilter = AppState.chargeCategoryFilter) {
+    const months = AppState.getFilteredMonths();
+    const monthKeys = months.map(month => month.key);
+    const normalizedQuery = normalizeText(query);
+    const groupsByKey = new Map();
+
+    months.forEach(month => {
+        getChargeItemsForMonth(month).forEach(item => {
+            if (categoryFilter && item.category !== categoryFilter) return;
+
+            const group = getChargeGroupInfo(item.name);
+            const searchText = normalizeText([
+                item.name,
+                item.category,
+                group.label,
+                group.key,
+                ...(group.terms || [])
+            ].join(' '));
+
+            if (!matchesNormalizedQuery(searchText, normalizedQuery)) return;
+
+            if (!groupsByKey.has(group.key)) {
+                groupsByKey.set(group.key, {
+                    key: group.key,
+                    label: group.label,
+                    categories: new Map(),
+                    monthValues: Object.fromEntries(monthKeys.map(key => [key, 0])),
+                    occurrences: [],
+                    total: 0
+                });
+            }
+
+            const entry = groupsByKey.get(group.key);
+            entry.monthValues[item.monthKey] = (entry.monthValues[item.monthKey] || 0) + item.value;
+            entry.occurrences.push(item);
+            entry.total += item.value;
+            entry.categories.set(item.category, (entry.categories.get(item.category) || 0) + 1);
+        });
+    });
+
+    return [...groupsByKey.values()]
+        .map(group => {
+            const values = monthKeys.map(key => group.monthValues[key] || 0);
+            const nonZeroValues = values.filter(value => value > 0);
+            const primaryCategory = [...group.categories.entries()]
+                .sort((a, b) => b[1] - a[1])[0]?.[0] || 'Sem categoria';
+            const firstValue = values.find(value => value > 0) || 0;
+            const lastValue = [...values].reverse().find(value => value > 0) || 0;
+
+            return {
+                ...group,
+                values,
+                primaryCategory,
+                average: values.length > 0 ? group.total / values.length : 0,
+                min: nonZeroValues.length > 0 ? Math.min(...nonZeroValues) : 0,
+                max: nonZeroValues.length > 0 ? Math.max(...nonZeroValues) : 0,
+                monthsWithValue: nonZeroValues.length,
+                variation: lastValue - firstValue
+            };
+        })
+        .filter(group => normalizedQuery || group.total > 0)
+        .sort((a, b) => b.total - a.total || a.label.localeCompare(b.label, 'pt-BR'));
 }
 
 function calculateTrend(current, previous) {
@@ -373,16 +704,17 @@ function renderEvolutionChart() {
         AppState.charts.evolution.destroy();
     }
 
-    if (AppState.months.length === 0) {
+    const months = AppState.getFilteredMonths();
+    if (months.length === 0) {
         AppState.charts.evolution = null;
         return;
     }
 
     const data = {
-        labels: AppState.months.map(m => `${m.month} ${m.year}`),
+        labels: months.map(getMonthLabel),
         datasets: [{
             label: 'Total de Despesas',
-            data: AppState.months.map(m => m.totalGeneral),
+            data: months.map(m => m.totalGeneral),
             borderColor: chartColors.emerald,
             backgroundColor: 'rgba(16, 185, 129, 0.1)',
             borderWidth: 3,
@@ -588,7 +920,8 @@ function renderStackedChart() {
         AppState.charts.stacked.destroy();
     }
 
-    if (AppState.months.length === 0) {
+    const months = AppState.getFilteredMonths();
+    if (months.length === 0) {
         AppState.charts.stacked = null;
         return;
     }
@@ -599,14 +932,14 @@ function renderStackedChart() {
 
     const datasets = allCategories.map(category => ({
         label: category,
-        data: AppState.months.map(m => m.categoryTotals[category] || 0),
+        data: months.map(m => m.categoryTotals[category] || 0),
         backgroundColor: categoryColors[category],
         borderColor: '#0a0e14',
         borderWidth: 1
     }));
 
     const data = {
-        labels: AppState.months.map(m => `${m.month} ${m.year}`),
+        labels: months.map(getMonthLabel),
         datasets: datasets
     };
 
@@ -679,6 +1012,7 @@ function updateDashboard() {
         updateMonthSelector();
         updateLoadedMonthsBadges();
         renderCategoriesView();
+        renderChargesView();
         return;
     }
 
@@ -705,6 +1039,10 @@ function updateDashboard() {
         updateTrendElement('feeTrend', feeTrend);
         updateTrendElement('reserveTrend', reserveTrend);
         updateTrendElement('avgTrend', avgTrend);
+    } else {
+        ['expensesTrend', 'feeTrend', 'reserveTrend', 'avgTrend'].forEach(id => {
+            updateTrendElement(id, { text: '—', class: 'neutral' });
+        });
     }
 
     renderEvolutionChart();
@@ -716,6 +1054,7 @@ function updateDashboard() {
     updateLoadedMonthsBadges();
 
     renderCategoriesView();
+    renderChargesView();
 }
 
 function updateTrendElement(elementId, trend) {
@@ -728,17 +1067,69 @@ function updateMonthSelector() {
     const selector = document.getElementById('monthFilter');
     const compareMonth1 = document.getElementById('compareMonth1');
     const compareMonth2 = document.getElementById('compareMonth2');
+    const periodStart = document.getElementById('periodStart');
+    const periodEnd = document.getElementById('periodEnd');
+    const chargeCategoryFilter = document.getElementById('chargeCategoryFilter');
+    const chargeSuggestions = document.getElementById('chargeSuggestions');
 
     const options = AppState.months.map(m =>
-        `<option value="${m.key}">${m.month} ${m.year}</option>`
+        `<option value="${escapeHtml(m.key)}">${escapeHtml(getMonthLabel(m))}</option>`
     ).join('');
 
-    selector.innerHTML = '<option value="">Todos os meses</option>' + options;
-    compareMonth1.innerHTML = '<option value="">Selecione...</option>' + options;
-    compareMonth2.innerHTML = '<option value="">Selecione...</option>' + options;
-    
-    if (AppState.selectedMonthFilter) {
-        selector.value = AppState.selectedMonthFilter;
+    const validMonthKeys = new Set(AppState.months.map(month => month.key));
+    if (AppState.selectedMonthFilter && !validMonthKeys.has(AppState.selectedMonthFilter)) {
+        AppState.selectedMonthFilter = null;
+    }
+    if (AppState.periodStartKey && !validMonthKeys.has(AppState.periodStartKey)) {
+        AppState.periodStartKey = null;
+    }
+    if (AppState.periodEndKey && !validMonthKeys.has(AppState.periodEndKey)) {
+        AppState.periodEndKey = null;
+    }
+
+    if (selector) {
+        selector.innerHTML = '<option value="">Último do período</option>' + options;
+        selector.value = AppState.selectedMonthFilter || '';
+    }
+
+    if (periodStart) {
+        periodStart.innerHTML = '<option value="">Início</option>' + options;
+        periodStart.value = AppState.periodStartKey || '';
+    }
+
+    if (periodEnd) {
+        periodEnd.innerHTML = '<option value="">Fim</option>' + options;
+        periodEnd.value = AppState.periodEndKey || '';
+    }
+
+    if (compareMonth1) {
+        const currentValue = compareMonth1.value;
+        compareMonth1.innerHTML = '<option value="">Selecione...</option>' + options;
+        compareMonth1.value = validMonthKeys.has(currentValue) ? currentValue : '';
+    }
+
+    if (compareMonth2) {
+        const currentValue = compareMonth2.value;
+        compareMonth2.innerHTML = '<option value="">Selecione...</option>' + options;
+        compareMonth2.value = validMonthKeys.has(currentValue) ? currentValue : '';
+    }
+
+    if (chargeCategoryFilter) {
+        const categories = getAvailableChargeCategories();
+        const categoryOptions = categories
+            .map(category => `<option value="${escapeHtml(category)}">${escapeHtml(category)}</option>`)
+            .join('');
+        if (AppState.chargeCategoryFilter && !categories.includes(AppState.chargeCategoryFilter)) {
+            AppState.chargeCategoryFilter = '';
+        }
+        chargeCategoryFilter.innerHTML = '<option value="">Todas as categorias</option>' + categoryOptions;
+        chargeCategoryFilter.value = AppState.chargeCategoryFilter;
+    }
+
+    if (chargeSuggestions) {
+        chargeSuggestions.innerHTML = getChargeSuggestions()
+            .map(suggestion => `<option value="${escapeHtml(suggestion)}"></option>`)
+            .join('');
     }
 }
 
@@ -746,8 +1137,8 @@ function updateLoadedMonthsBadges() {
     const container = document.getElementById('loadedMonths');
     container.innerHTML = AppState.months.map(m => `
         <div class="month-badge">
-            ${m.month} ${m.year}
-            <button onclick="removeMonth('${m.key}')">×</button>
+            ${escapeHtml(getMonthLabel(m))}
+            <button onclick="removeMonth('${escapeHtml(m.key)}')">×</button>
         </div>
     `).join('');
 }
@@ -767,7 +1158,7 @@ function renderCategoriesView() {
             const itemsCount = latestMonth.categories[category].length;
             return `
                 <div class="card category-card" onclick="showCategoryDetail('${category}')">
-                    <div class="category-name">${category}</div>
+                    <div class="category-name">${escapeHtml(category)}</div>
                     <div class="category-total">${formatCurrency(total)}</div>
                     <div class="category-items-count">${itemsCount} ${itemsCount === 1 ? 'item' : 'itens'}</div>
                 </div>
@@ -791,7 +1182,7 @@ function showCategoryDetail(categoryName) {
     const items = latestMonth.categories[categoryName];
     const itemsHtml = items.map(item => `
         <div class="category-item">
-            <span class="category-item-name">${item.name}</span>
+            <span class="category-item-name">${escapeHtml(item.name)}</span>
             <span class="category-item-value">${formatCurrency(item.value)}</span>
         </div>
     `).join('');
@@ -811,11 +1202,12 @@ function renderCategoryHistoryChart(categoryName) {
         AppState.charts.categoryHistory.destroy();
     }
 
+    const months = AppState.getFilteredMonths();
     const data = {
-        labels: AppState.months.map(m => `${m.month} ${m.year}`),
+        labels: months.map(getMonthLabel),
         datasets: [{
             label: categoryName,
-            data: AppState.months.map(m => m.categoryTotals[categoryName] || 0),
+            data: months.map(m => m.categoryTotals[categoryName] || 0),
             borderColor: categoryColors[categoryName] || chartColors.emerald,
             backgroundColor: `${categoryColors[categoryName] || chartColors.emerald}33`,
             borderWidth: 3,
@@ -831,6 +1223,212 @@ function renderCategoryHistoryChart(categoryName) {
         data: data,
         options: getChartOptions('bar')
     });
+}
+
+const chargeChartPalette = [
+    '#10b981',
+    '#3b82f6',
+    '#f59e0b',
+    '#8b5cf6',
+    '#ec4899',
+    '#06b6d4',
+    '#f97316',
+    '#ef4444'
+];
+
+function renderChargesView() {
+    const searchInput = document.getElementById('chargeSearch');
+    const summaryContainer = document.getElementById('chargeSummary');
+    const tableContainer = document.getElementById('chargeComparisonTable');
+    const detailContainer = document.getElementById('chargeDetails');
+
+    if (!summaryContainer || !tableContainer || !detailContainer) return;
+
+    if (searchInput && searchInput.value !== AppState.chargeSearch) {
+        searchInput.value = AppState.chargeSearch;
+    }
+
+    const months = AppState.getFilteredMonths();
+    const groups = getChargeGroups();
+    const hasActiveSearch = Boolean(normalizeText(AppState.chargeSearch) || AppState.chargeCategoryFilter);
+    const visibleGroups = hasActiveSearch ? groups : groups.slice(0, 12);
+    const totalValue = visibleGroups.reduce((sum, group) => sum + group.total, 0);
+
+    summaryContainer.innerHTML = `
+        <div class="charge-stat">
+            <span>Período</span>
+            <strong>${escapeHtml(getPeriodLabel(months))}</strong>
+        </div>
+        <div class="charge-stat">
+            <span>Cobranças</span>
+            <strong>${visibleGroups.length}</strong>
+        </div>
+        <div class="charge-stat">
+            <span>Total filtrado</span>
+            <strong>${formatCurrency(totalValue)}</strong>
+        </div>
+        <div class="charge-stat">
+            <span>Meses</span>
+            <strong>${months.length}</strong>
+        </div>
+    `;
+
+    const chargesView = document.getElementById('chargesView');
+    const isChargesViewActive = chargesView && chargesView.classList.contains('active');
+    if (isChargesViewActive) {
+        renderChargeComparisonChart(months, visibleGroups);
+    } else if (AppState.charts.chargeComparison) {
+        AppState.charts.chargeComparison.destroy();
+        AppState.charts.chargeComparison = null;
+    }
+    tableContainer.innerHTML = renderChargeComparisonTable(months, visibleGroups, hasActiveSearch);
+    detailContainer.innerHTML = renderChargeDetails(visibleGroups, hasActiveSearch);
+}
+
+function renderChargeComparisonChart(months, groups) {
+    const ctx = document.getElementById('chargeComparisonChart');
+    if (!ctx) return;
+
+    if (AppState.charts.chargeComparison) {
+        AppState.charts.chargeComparison.destroy();
+    }
+
+    if (months.length === 0 || groups.length === 0) {
+        AppState.charts.chargeComparison = null;
+        return;
+    }
+
+    const chartGroups = groups.slice(0, 6);
+    const data = {
+        labels: months.map(getMonthLabel),
+        datasets: chartGroups.map((group, index) => {
+            const color = chargeChartPalette[index % chargeChartPalette.length];
+            return {
+                label: group.label,
+                data: months.map(month => group.monthValues[month.key] || 0),
+                backgroundColor: `${color}cc`,
+                borderColor: color,
+                borderWidth: 1,
+                borderRadius: 4,
+                maxBarThickness: 32
+            };
+        })
+    };
+
+    const options = {
+        ...getChartOptions('bar'),
+        plugins: {
+            ...getChartOptions('bar').plugins,
+            legend: {
+                display: true,
+                position: 'bottom',
+                labels: {
+                    color: '#e6e8eb',
+                    boxWidth: 12,
+                    padding: 14
+                }
+            }
+        },
+        animation: {
+            duration: 450
+        }
+    };
+
+    AppState.charts.chargeComparison = new Chart(ctx, {
+        type: 'bar',
+        data,
+        options
+    });
+}
+
+function renderChargeComparisonTable(months, groups, hasActiveSearch) {
+    if (months.length === 0) {
+        return '<div class="empty-state">Nenhum mês disponível no período selecionado.</div>';
+    }
+
+    if (groups.length === 0) {
+        const message = hasActiveSearch
+            ? 'Nenhuma cobrança encontrada para os filtros atuais.'
+            : 'Nenhuma cobrança carregada.';
+        return `<div class="empty-state">${message}</div>`;
+    }
+
+    const monthHeaders = months.map(month => `
+        <th>
+            <span>${escapeHtml(month.month.slice(0, 3))}</span>
+            <small>${escapeHtml(month.year)}</small>
+        </th>
+    `).join('');
+
+    const rows = groups.map(group => {
+        const monthCells = months.map(month => {
+            const value = group.monthValues[month.key] || 0;
+            return `<td class="${value > 0 ? '' : 'muted-cell'}">${value > 0 ? formatCurrency(value) : '—'}</td>`;
+        }).join('');
+
+        return `
+            <tr>
+                <td class="charge-name-cell">
+                    <strong>${escapeHtml(group.label)}</strong>
+                    <span>${escapeHtml(group.primaryCategory)}</span>
+                </td>
+                <td>${formatCurrency(group.total)}</td>
+                <td>${formatCurrency(group.average)}</td>
+                <td>${group.monthsWithValue}/${months.length}</td>
+                ${monthCells}
+            </tr>
+        `;
+    }).join('');
+
+    return `
+        <div class="table-scroll">
+            <table class="charge-table">
+                <thead>
+                    <tr>
+                        <th>Cobrança</th>
+                        <th>Total</th>
+                        <th>Média</th>
+                        <th>Meses</th>
+                        ${monthHeaders}
+                    </tr>
+                </thead>
+                <tbody>${rows}</tbody>
+            </table>
+        </div>
+    `;
+}
+
+function renderChargeDetails(groups, hasActiveSearch) {
+    if (!hasActiveSearch || groups.length === 0) return '';
+
+    const occurrences = groups
+        .flatMap(group => group.occurrences.map(item => ({ ...item, groupLabel: group.label })))
+        .sort((a, b) => a.monthDate - b.monthDate || a.groupLabel.localeCompare(b.groupLabel, 'pt-BR'));
+
+    const rows = occurrences.slice(0, 80).map(item => `
+        <div class="charge-detail-item">
+            <div>
+                <strong>${escapeHtml(item.name)}</strong>
+                <span>${escapeHtml(item.monthLabel)} · ${escapeHtml(item.category)} · ${escapeHtml(item.groupLabel)}</span>
+            </div>
+            <strong>${formatCurrency(item.value)}</strong>
+        </div>
+    `).join('');
+
+    const hiddenCount = Math.max(occurrences.length - 80, 0);
+    const footer = hiddenCount > 0
+        ? `<div class="charge-detail-footer">Mais ${hiddenCount} lançamento(s) oculto(s) para manter a tela objetiva.</div>`
+        : '';
+
+    return `
+        <div class="card charge-detail-card">
+            <div class="card-header">
+                <h3 class="chart-title">Lançamentos encontrados</h3>
+            </div>
+            <div class="charge-detail-list">${rows}</div>
+            ${footer}
+        </div>
+    `;
 }
 
 function renderComparisonView() {
@@ -854,7 +1452,7 @@ function renderComparisonView() {
     if (!month1 || !month2) return;
 
     const diff = month2.totalGeneral - month1.totalGeneral;
-    const diffPercent = ((diff / month1.totalGeneral) * 100).toFixed(1);
+    const diffPercent = month1.totalGeneral > 0 ? ((diff / month1.totalGeneral) * 100).toFixed(1) : '0.0';
     const diffClass = diff > 0 ? 'text-red' : (diff < 0 ? 'text-emerald' : 'text-muted');
 
     resultsContainer.innerHTML = `
@@ -1018,9 +1616,15 @@ function switchView(viewName) {
         dashboard: 'Dashboard',
         evolution: 'Evolução',
         categories: 'Categorias',
+        charges: 'Cobranças',
         comparison: 'Comparação'
     };
     document.querySelector('.page-title').textContent = titles[viewName];
+
+    if (viewName === 'charges') {
+        renderChargesView();
+        requestAnimationFrame(() => renderChargesView());
+    }
 }
 
 function clearAllData() {
@@ -1028,6 +1632,15 @@ function clearAllData() {
         AppState.clear();
         updateDashboard();
         alert('Todos os dados foram removidos.');
+    }
+}
+
+function keepFocusedMonthInsidePeriod() {
+    if (!AppState.selectedMonthFilter) return;
+
+    const filteredKeys = new Set(AppState.getFilteredMonths().map(month => month.key));
+    if (!filteredKeys.has(AppState.selectedMonthFilter)) {
+        AppState.selectedMonthFilter = null;
     }
 }
 
@@ -1136,6 +1749,35 @@ document.addEventListener('DOMContentLoaded', function() {
     document.getElementById('monthFilter').addEventListener('change', function(e) {
         AppState.selectedMonthFilter = e.target.value || null;
         updateDashboard();
+    });
+
+    document.getElementById('periodStart').addEventListener('change', function(e) {
+        AppState.periodStartKey = e.target.value || null;
+        keepFocusedMonthInsidePeriod();
+        updateDashboard();
+    });
+
+    document.getElementById('periodEnd').addEventListener('change', function(e) {
+        AppState.periodEndKey = e.target.value || null;
+        keepFocusedMonthInsidePeriod();
+        updateDashboard();
+    });
+
+    document.getElementById('clearPeriodBtn').addEventListener('click', function() {
+        AppState.periodStartKey = null;
+        AppState.periodEndKey = null;
+        AppState.selectedMonthFilter = null;
+        updateDashboard();
+    });
+
+    document.getElementById('chargeSearch').addEventListener('input', function(e) {
+        AppState.chargeSearch = e.target.value;
+        renderChargesView();
+    });
+
+    document.getElementById('chargeCategoryFilter').addEventListener('change', function(e) {
+        AppState.chargeCategoryFilter = e.target.value || '';
+        renderChargesView();
     });
 
     console.log('\n🚀 INICIALIZANDO GRAN FLORATA DASHBOARD...');
