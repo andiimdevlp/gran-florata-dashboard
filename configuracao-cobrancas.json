@@ -1,0 +1,137 @@
+{
+  "categoriaPadrao": "OUTROS",
+  "categorias": [
+    {
+      "nome": "ENCARGOS SOCIAIS",
+      "grupos": []
+    },
+    {
+      "nome": "CONCESSIONÁRIAS",
+      "aliases": ["CONCESSIONARIAS"],
+      "grupos": ["agua", "energia"],
+      "somenteGruposConfigurados": true
+    },
+    {
+      "nome": "ADMINISTRAÇÃO",
+      "aliases": ["ADMINISTRACAO"],
+      "grupos": ["honorario-juridico", "honorario-contabil", "honorario-sindica"]
+    },
+    {
+      "nome": "MANUTENÇÃO",
+      "aliases": ["MANUTENÇÃO E CONSERVAÇÃO", "MANUTENCAO", "MANUTENCAO E CONSERVACAO"],
+      "grupos": [
+        "limpeza",
+        "zeladoria",
+        "elevadores",
+        "seguranca",
+        "piscina",
+        "jardinagem",
+        "seguro-predial",
+        "condobem"
+      ]
+    },
+    {
+      "nome": "DESPESAS BANCARIAS",
+      "aliases": ["DESPESAS BANCÁRIAS"],
+      "grupos": ["despesas-bancarias"]
+    },
+    {
+      "nome": "OUTROS VALORES INDIVIDUAIS",
+      "grupos": ["churrasqueira", "mudanca", "multa-regimento"]
+    },
+    {
+      "nome": "OUTROS",
+      "grupos": []
+    }
+  ],
+  "grupos": [
+    {
+      "id": "agua",
+      "nome": "Água",
+      "termos": ["saneago", "água coletiva"],
+      "termosBusca": ["água", "saneago", "água coletiva"]
+    },
+    {
+      "id": "energia",
+      "nome": "Energia",
+      "termos": ["equatorial"],
+      "termosBusca": ["energia", "equatorial", "luz"]
+    },
+    {
+      "id": "honorario-juridico",
+      "nome": "Honorário jurídico / advocacia",
+      "termos": ["honorário juridico", "honorário jurídico", "juridico", "jurídico", "advogado", "advocacia"],
+      "termosBusca": ["honorário jurídico", "honorarios de advogados", "advogado", "advocacia"]
+    },
+    {
+      "id": "honorario-contabil",
+      "nome": "Honorário contábil",
+      "termos": ["honorário contábil", "honorario contabil", "contábil", "contabil"]
+    },
+    {
+      "id": "honorario-sindica",
+      "nome": "Honorário síndica",
+      "termos": ["honorário síndica", "honorario sindica", "síndica", "sindica", "síndico", "sindico"]
+    },
+    {
+      "id": "limpeza",
+      "nome": "Prestação de limpeza",
+      "termos": ["limpeza", "alfa soluções", "alfa solucoes", "prestadora de serviços limpeza"]
+    },
+    {
+      "id": "zeladoria",
+      "nome": "Zeladoria / gerência de manutenção",
+      "termos": ["zeladoria", "gerência de manutenção", "gerencia de manutencao", "condoeng"]
+    },
+    {
+      "id": "elevadores",
+      "nome": "Manutenção de elevadores",
+      "termos": ["elevador", "elevadores", "otis"]
+    },
+    {
+      "id": "seguranca",
+      "nome": "Segurança / câmeras / acesso",
+      "termos": ["segurança", "seguranca", "câmera", "camera", "câmeras", "cameras", "cerca elétrica", "cerca eletrica", "acesso", "federal segurança"]
+    },
+    {
+      "id": "piscina",
+      "nome": "Manutenção da piscina",
+      "termos": ["piscina"]
+    },
+    {
+      "id": "jardinagem",
+      "nome": "Jardinagem",
+      "termos": ["jardinagem", "paisagismo", "gr oliveira"]
+    },
+    {
+      "id": "seguro-predial",
+      "nome": "Seguro predial",
+      "termos": ["seguro predial", "hdi"]
+    },
+    {
+      "id": "condobem",
+      "nome": "Comissão CondoBem",
+      "termos": ["condobem", "antecipação de receita", "antecipacao de receita", "liquidação de boletos", "liquidacao de boletos"]
+    },
+    {
+      "id": "despesas-bancarias",
+      "nome": "Despesas bancárias",
+      "termos": ["manut. conta corrente", "conta corrente", "tarifa bancária", "tarifa bancaria"]
+    },
+    {
+      "id": "churrasqueira",
+      "nome": "Churrasqueira",
+      "termos": ["churrasqueira"]
+    },
+    {
+      "id": "mudanca",
+      "nome": "Mudança",
+      "termos": ["mudança", "mudanca"]
+    },
+    {
+      "id": "multa-regimento",
+      "nome": "Multa regimento interno",
+      "termos": ["multa regimento interno"]
+    }
+  ]
+}

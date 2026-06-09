@@ -139,15 +139,222 @@ const AppState = {
     }
 };
 
-const standardCategoryNames = [
-    'ENCARGOS SOCIAIS',
-    'CONCESSIONÁRIAS',
-    'ADMINISTRAÇÃO',
-    'MANUTENÇÃO E CONSERVAÇÃO',
-    'DESPESAS BANCARIAS',
-    'OUTROS VALORES INDIVIDUAIS',
-    'OUTROS'
-];
+const defaultChargeConfiguration = {
+    categoriaPadrao: 'OUTROS',
+    categorias: [
+        { nome: 'ENCARGOS SOCIAIS', grupos: [] },
+        { nome: 'CONCESSIONÁRIAS', aliases: ['CONCESSIONARIAS'], grupos: ['agua', 'energia'], somenteGruposConfigurados: true },
+        { nome: 'ADMINISTRAÇÃO', aliases: ['ADMINISTRACAO'], grupos: ['honorario-juridico', 'honorario-contabil', 'honorario-sindica'] },
+        { nome: 'MANUTENÇÃO', aliases: ['MANUTENÇÃO E CONSERVAÇÃO', 'MANUTENCAO', 'MANUTENCAO E CONSERVACAO'], grupos: ['limpeza', 'zeladoria', 'elevadores', 'seguranca', 'piscina', 'jardinagem', 'seguro-predial', 'condobem'] },
+        { nome: 'DESPESAS BANCARIAS', aliases: ['DESPESAS BANCÁRIAS'], grupos: ['despesas-bancarias'] },
+        { nome: 'OUTROS VALORES INDIVIDUAIS', grupos: ['churrasqueira', 'mudanca', 'multa-regimento'] },
+        { nome: 'OUTROS', grupos: [] }
+    ],
+    grupos: [
+        {
+            id: 'agua',
+            nome: 'Água',
+            termos: ['saneago', 'água coletiva'],
+            termosBusca: ['água', 'saneago', 'água coletiva']
+        },
+        {
+            id: 'energia',
+            nome: 'Energia',
+            termos: ['equatorial'],
+            termosBusca: ['energia', 'equatorial', 'luz']
+        },
+        {
+            id: 'honorario-juridico',
+            nome: 'Honorário jurídico / advocacia',
+            termos: ['honorário juridico', 'honorário jurídico', 'juridico', 'jurídico', 'advogado', 'advocacia'],
+            termosBusca: ['honorário jurídico', 'honorarios de advogados', 'advogado', 'advocacia']
+        },
+        {
+            id: 'honorario-contabil',
+            nome: 'Honorário contábil',
+            termos: ['honorário contábil', 'honorario contabil', 'contábil', 'contabil']
+        },
+        {
+            id: 'honorario-sindica',
+            nome: 'Honorário síndica',
+            termos: ['honorário síndica', 'honorario sindica', 'síndica', 'sindica', 'síndico', 'sindico']
+        },
+        {
+            id: 'limpeza',
+            nome: 'Prestação de limpeza',
+            termos: ['limpeza', 'alfa soluções', 'alfa solucoes', 'prestadora de serviços limpeza']
+        },
+        {
+            id: 'zeladoria',
+            nome: 'Zeladoria / gerência de manutenção',
+            termos: ['zeladoria', 'gerência de manutenção', 'gerencia de manutencao', 'condoeng']
+        },
+        {
+            id: 'elevadores',
+            nome: 'Manutenção de elevadores',
+            termos: ['elevador', 'elevadores', 'otis']
+        },
+        {
+            id: 'seguranca',
+            nome: 'Segurança / câmeras / acesso',
+            termos: ['segurança', 'seguranca', 'câmera', 'camera', 'câmeras', 'cameras', 'cerca elétrica', 'cerca eletrica', 'acesso', 'federal segurança']
+        },
+        {
+            id: 'piscina',
+            nome: 'Manutenção da piscina',
+            termos: ['piscina']
+        },
+        {
+            id: 'jardinagem',
+            nome: 'Jardinagem',
+            termos: ['jardinagem', 'paisagismo', 'gr oliveira']
+        },
+        {
+            id: 'seguro-predial',
+            nome: 'Seguro predial',
+            termos: ['seguro predial', 'hdi']
+        },
+        {
+            id: 'condobem',
+            nome: 'Comissão CondoBem',
+            termos: ['condobem', 'antecipação de receita', 'antecipacao de receita', 'liquidação de boletos', 'liquidacao de boletos']
+        },
+        {
+            id: 'despesas-bancarias',
+            nome: 'Despesas bancárias',
+            termos: ['manut. conta corrente', 'conta corrente', 'tarifa bancária', 'tarifa bancaria']
+        },
+        {
+            id: 'churrasqueira',
+            nome: 'Churrasqueira',
+            termos: ['churrasqueira']
+        },
+        {
+            id: 'mudanca',
+            nome: 'Mudança',
+            termos: ['mudança', 'mudanca']
+        },
+        {
+            id: 'multa-regimento',
+            nome: 'Multa regimento interno',
+            termos: ['multa regimento interno']
+        }
+    ]
+};
+
+let ChargeConfiguration = createChargeConfiguration(defaultChargeConfiguration);
+let standardCategoryNames = ChargeConfiguration.categoryNames;
+let chargeGroupRules = ChargeConfiguration.groups;
+
+function createChargeConfiguration(rawConfig) {
+    const config = rawConfig && typeof rawConfig === 'object' ? rawConfig : defaultChargeConfiguration;
+    const fallbackCategory = config.categoriaPadrao || defaultChargeConfiguration.categoriaPadrao;
+    const rawCategories = Array.isArray(config.categorias) && config.categorias.length > 0
+        ? config.categorias
+        : defaultChargeConfiguration.categorias;
+    const rawGroups = Array.isArray(config.grupos) ? config.grupos : defaultChargeConfiguration.grupos;
+    const normalizeList = values => Array.isArray(values)
+        ? values.map(value => String(value).trim()).filter(Boolean)
+        : [];
+    const categoryNames = [];
+    const categoriesByKey = new Map();
+
+    rawCategories.forEach(category => {
+        if (!category?.nome) return;
+        const categoryName = String(category.nome).trim();
+        if (!categoryName) return;
+
+        const normalizedCategory = {
+            name: categoryName,
+            aliases: normalizeList(category.aliases),
+            groupIds: normalizeList(category.grupos),
+            onlyConfiguredGroups: Boolean(category.somenteGruposConfigurados)
+        };
+
+        if (!categoryNames.includes(normalizedCategory.name)) {
+            categoryNames.push(normalizedCategory.name);
+        }
+
+        [normalizedCategory.name, ...normalizedCategory.aliases].forEach(alias => {
+            categoriesByKey.set(normalizeText(alias), normalizedCategory);
+        });
+    });
+
+    const fallbackCategoryName = categoriesByKey.get(normalizeText(fallbackCategory))?.name || fallbackCategory;
+    const categoryByGroupId = new Map();
+
+    categoriesByKey.forEach(category => {
+        category.groupIds.forEach(groupId => {
+            if (!categoryByGroupId.has(groupId)) {
+                categoryByGroupId.set(groupId, category.name);
+            }
+        });
+    });
+
+    if (!categoryNames.includes(fallbackCategoryName)) {
+        categoryNames.push(fallbackCategoryName);
+    }
+
+    const groups = rawGroups
+        .filter(group => group?.id && group?.nome)
+        .filter(group => String(group.id).trim() && String(group.nome).trim())
+        .map(group => {
+            const groupId = String(group.id).trim();
+            const matchTerms = normalizeList(group.termos);
+            const configuredSearchTerms = normalizeList(group.termosBusca);
+            const searchTerms = configuredSearchTerms.length > 0
+                ? configuredSearchTerms
+                : matchTerms;
+            const configuredCategory = categoryByGroupId.get(groupId) || group.categoria || null;
+            const canonicalCategory = configuredCategory
+                ? (categoriesByKey.get(normalizeText(configuredCategory))?.name || configuredCategory)
+                : null;
+
+            return {
+                key: groupId,
+                label: String(group.nome).trim(),
+                category: canonicalCategory,
+                matchTerms,
+                terms: searchTerms
+            };
+        });
+
+    return {
+        categoryNames,
+        categoriesByKey,
+        fallbackCategory: fallbackCategoryName,
+        groups
+    };
+}
+
+async function loadChargeConfiguration() {
+    try {
+        const response = await fetch('configuracao-cobrancas.json', { cache: 'no-store' });
+        if (!response.ok) {
+            throw new Error(`HTTP ${response.status}`);
+        }
+
+        const config = await response.json();
+        ChargeConfiguration = createChargeConfiguration(config);
+        standardCategoryNames = ChargeConfiguration.categoryNames;
+        chargeGroupRules = ChargeConfiguration.groups;
+        console.log(`✓ Configuração de cobranças carregada (${chargeGroupRules.length} grupos)`);
+    } catch (error) {
+        ChargeConfiguration = createChargeConfiguration(defaultChargeConfiguration);
+        standardCategoryNames = ChargeConfiguration.categoryNames;
+        chargeGroupRules = ChargeConfiguration.groups;
+        console.warn('Não foi possível carregar configuracao-cobrancas.json. Usando configuração padrão.', error);
+    }
+}
+
+function getCanonicalCategoryName(categoryName) {
+    const category = ChargeConfiguration.categoriesByKey.get(normalizeText(categoryName));
+    return category ? category.name : null;
+}
+
+function getConfiguredCategory(categoryName) {
+    return ChargeConfiguration.categoriesByKey.get(normalizeText(categoryName)) || null;
+}
 
 function createCategoryBuckets() {
     return Object.fromEntries(standardCategoryNames.map(category => [category, []]));
@@ -173,9 +380,15 @@ function normalizeMonthData(monthData) {
 
         items.forEach(item => {
             const group = getChargeGroupInfo(item.name);
-            const targetCategory = ['agua-saneago', 'energia-equatorial', 'gas-coletivo'].includes(group.key)
-                ? 'CONCESSIONÁRIAS'
-                : (standardCategoryNames.includes(category) ? category : 'OUTROS');
+            const originalCategory = getCanonicalCategoryName(category) || category;
+            const categoryConfig = getConfiguredCategory(originalCategory);
+            const configuredCategory = group.category ? getCanonicalCategoryName(group.category) : null;
+            const targetCategory = configuredCategory
+                || (categoryConfig?.onlyConfiguredGroups ? ChargeConfiguration.fallbackCategory : originalCategory);
+
+            if (!normalizedCategories[targetCategory]) {
+                normalizedCategories[targetCategory] = [];
+            }
 
             normalizedCategories[targetCategory].push({
                 name: item.name,
@@ -229,8 +442,6 @@ function parseFinancialReport(text) {
     let apartmentFee = 0;
     let reserveFund = 0;
 
-    const knownCategories = Object.keys(categories).filter(c => c !== 'OUTROS');
-
     for (let i = 1; i < lines.length; i++) {
         const line = lines[i];
         const nextLine = i + 1 < lines.length ? lines[i + 1] : '';
@@ -239,8 +450,9 @@ function parseFinancialReport(text) {
             continue;
         }
 
-        if (knownCategories.includes(line.toUpperCase())) {
-            currentCategory = line.toUpperCase();
+        const canonicalLineCategory = getCanonicalCategoryName(line.toUpperCase());
+        if (canonicalLineCategory) {
+            currentCategory = canonicalLineCategory;
             continue;
         }
 
@@ -252,9 +464,9 @@ function parseFinancialReport(text) {
             !line.includes('FUNDO DE RESERVA') &&
             !line.includes('VALOR DA TAXA') &&
             !line.includes('Previsão') &&
-            !knownCategories.includes(line.toUpperCase()) &&
+            !getCanonicalCategoryName(line.toUpperCase()) &&
             !nextLine.startsWith('R$')) {
-            currentCategory = 'OUTROS';
+            currentCategory = ChargeConfiguration.fallbackCategory;
             continue;
         }
 
@@ -375,72 +587,6 @@ function cleanChargeLabel(value) {
         .trim();
 }
 
-const chargeGroupRules = [
-    {
-        key: 'agua-saneago',
-        label: 'Água / SANEAGO',
-        matchTerms: ['saneago', 'agua coletiva'],
-        terms: ['agua', 'saneago', 'agua coletiva']
-    },
-    {
-        key: 'energia-equatorial',
-        label: 'Energia / EQUATORIAL',
-        matchTerms: ['equatorial'],
-        terms: ['energia', 'equatorial', 'eletricidade', 'luz', 'conta de luz']
-    },
-    {
-        key: 'gas-coletivo',
-        label: 'Gás coletivo',
-        matchTerms: ['gas coletiva', 'gas coletivo'],
-        terms: ['gas', 'gas coletiva', 'gas coletivo']
-    },
-    {
-        key: 'honorario-juridico',
-        label: 'Honorário jurídico / advocacia',
-        terms: ['honorario juridico', 'juridico', 'advogado', 'advogados', 'advocacia']
-    },
-    {
-        key: 'honorario-contabil',
-        label: 'Honorário contábil',
-        terms: ['honorario contabil', 'contabil', 'contabilidade']
-    },
-    {
-        key: 'honorario-sindica',
-        label: 'Honorário síndica',
-        terms: ['honorario sindica', 'sindica', 'sindico']
-    },
-    {
-        key: 'limpeza',
-        label: 'Prestação de limpeza',
-        terms: ['limpeza', 'alfa solucoes', 'prestadora de servicos limpeza']
-    },
-    {
-        key: 'elevadores',
-        label: 'Manutenção de elevadores',
-        terms: ['elevador', 'elevadores', 'otis']
-    },
-    {
-        key: 'seguranca',
-        label: 'Segurança / câmeras / acesso',
-        terms: ['seguranca', 'camera', 'cameras', 'cerca eletrica', 'acesso', 'federal seguranca']
-    },
-    {
-        key: 'piscina',
-        label: 'Manutenção da piscina',
-        terms: ['piscina']
-    },
-    {
-        key: 'seguro-predial',
-        label: 'Seguro predial',
-        terms: ['seguro predial', 'hdi']
-    },
-    {
-        key: 'condobem',
-        label: 'Comissão CondoBem',
-        terms: ['condobem', 'antecipacao de receita', 'liquidacao de boletos']
-    }
-];
-
 function getChargeGroupInfo(name) {
     const normalizedName = normalizeText(name);
     const matchedRule = chargeGroupRules.find(rule =>
@@ -525,10 +671,28 @@ function getChargeSuggestions() {
     return [...suggestions.values()].sort((a, b) => a.localeCompare(b, 'pt-BR'));
 }
 
+function getConfiguredGroupsMatchingQuery(normalizedQuery) {
+    if (!normalizedQuery) return new Set();
+
+    return new Set(chargeGroupRules
+        .filter(rule => {
+            const searchText = normalizeText([
+                rule.label,
+                rule.key,
+                ...(rule.terms || []),
+                ...(rule.matchTerms || [])
+            ].join(' '));
+
+            return matchesNormalizedQuery(searchText, normalizedQuery);
+        })
+        .map(rule => rule.key));
+}
+
 function getChargeGroups(query = AppState.chargeSearch, categoryFilter = AppState.chargeCategoryFilter) {
     const months = AppState.getFilteredMonths();
     const monthKeys = months.map(month => month.key);
     const normalizedQuery = normalizeText(query);
+    const configuredQueryGroupKeys = getConfiguredGroupsMatchingQuery(normalizedQuery);
     const groupsByKey = new Map();
 
     months.forEach(month => {
@@ -536,6 +700,8 @@ function getChargeGroups(query = AppState.chargeSearch, categoryFilter = AppStat
             if (categoryFilter && item.category !== categoryFilter) return;
 
             const group = getChargeGroupInfo(item.name);
+            if (configuredQueryGroupKeys.size > 0 && !configuredQueryGroupKeys.has(group.key)) return;
+
             const searchText = normalizeText([
                 item.name,
                 item.category,
@@ -544,7 +710,7 @@ function getChargeGroups(query = AppState.chargeSearch, categoryFilter = AppStat
                 ...(group.terms || [])
             ].join(' '));
 
-            if (!matchesNormalizedQuery(searchText, normalizedQuery)) return;
+            if (configuredQueryGroupKeys.size === 0 && !matchesNormalizedQuery(searchText, normalizedQuery)) return;
 
             if (!groupsByKey.has(group.key)) {
                 groupsByKey.set(group.key, {
@@ -618,11 +784,17 @@ const categoryColors = {
     'ENCARGOS SOCIAIS': chartColors.emerald,
     'CONCESSIONÁRIAS': chartColors.amber,
     'ADMINISTRAÇÃO': chartColors.blue,
+    'MANUTENÇÃO': chartColors.purple,
     'MANUTENÇÃO E CONSERVAÇÃO': chartColors.purple,
     'DESPESAS BANCARIAS': chartColors.pink,
     'OUTROS VALORES INDIVIDUAIS': chartColors.cyan,
     'OUTROS': chartColors.orange
 };
+
+function getCategoryColor(category, index = 0) {
+    const palette = Object.values(chartColors);
+    return categoryColors[category] || palette[index % palette.length] || chartColors.orange;
+}
 
 Chart.defaults.color = '#9ca3af';
 Chart.defaults.borderColor = 'rgba(255, 255, 255, 0.08)';
@@ -764,7 +936,7 @@ function renderDistributionChart() {
         labels: categories.map(([cat, _]) => cat),
         datasets: [{
             data: categories.map(([_, value]) => value),
-            backgroundColor: categories.map(([cat, _]) => categoryColors[cat] || chartColors.orange),
+            backgroundColor: categories.map(([cat, _], index) => getCategoryColor(cat, index)),
             borderColor: '#0a0e14',
             borderWidth: 2,
             hoverOffset: 10
@@ -854,7 +1026,7 @@ function renderTopExpensesChart() {
         datasets: [{
             label: 'Valor',
             data: top10.map(item => item.value),
-            backgroundColor: top10.map(item => categoryColors[item.category] || chartColors.orange),
+            backgroundColor: top10.map((item, index) => getCategoryColor(item.category, index)),
             borderColor: '#0a0e14',
             borderWidth: 1
         }]
@@ -926,14 +1098,14 @@ function renderStackedChart() {
         return;
     }
 
-    const allCategories = ['ENCARGOS SOCIAIS', 'CONCESSIONÁRIAS', 'ADMINISTRAÇÃO',
-                          'MANUTENÇÃO E CONSERVAÇÃO', 'DESPESAS BANCARIAS',
-                          'OUTROS VALORES INDIVIDUAIS', 'OUTROS'];
+    const allCategories = standardCategoryNames.filter(category =>
+        months.some(month => (month.categoryTotals[category] || 0) > 0)
+    );
 
-    const datasets = allCategories.map(category => ({
+    const datasets = allCategories.map((category, index) => ({
         label: category,
         data: months.map(m => m.categoryTotals[category] || 0),
-        backgroundColor: categoryColors[category],
+        backgroundColor: getCategoryColor(category, index),
         borderColor: '#0a0e14',
         borderWidth: 1
     }));
@@ -1203,13 +1375,14 @@ function renderCategoryHistoryChart(categoryName) {
     }
 
     const months = AppState.getFilteredMonths();
+    const categoryColor = getCategoryColor(categoryName);
     const data = {
         labels: months.map(getMonthLabel),
         datasets: [{
             label: categoryName,
             data: months.map(m => m.categoryTotals[categoryName] || 0),
-            borderColor: categoryColors[categoryName] || chartColors.emerald,
-            backgroundColor: `${categoryColors[categoryName] || chartColors.emerald}33`,
+            borderColor: categoryColor,
+            backgroundColor: `${categoryColor}33`,
             borderWidth: 3,
             tension: 0.4,
             fill: true,
@@ -1548,13 +1721,18 @@ async function getSampleDataFiles() {
         const files = Array.isArray(manifest) ? manifest : manifest.files;
 
         if (Array.isArray(files) && files.length > 0) {
-            return files.map(file => file.startsWith('sample-data/') ? file : `sample-data/${file}`);
+            return files.map(getSampleDataUrl);
         }
     } catch (error) {
         console.warn('Não foi possível carregar sample-data/manifest.json. Usando lista padrão.', error);
     }
 
-    return fallbackSampleFiles;
+    return fallbackSampleFiles.map(getSampleDataUrl);
+}
+
+function getSampleDataUrl(file) {
+    const cleanFile = String(file).replace(/^sample-data\//, '');
+    return `sample-data/${encodeURIComponent(cleanFile)}`;
 }
 
 async function loadSampleData(options = {}) {
@@ -1736,7 +1914,7 @@ function initMobileMenu() {
 window.debugState = debugState;
 window.forceReorder = forceReorder;
 
-document.addEventListener('DOMContentLoaded', function() {
+document.addEventListener('DOMContentLoaded', async function() {
     
     initMobileMenu();
 
@@ -1805,6 +1983,8 @@ document.addEventListener('DOMContentLoaded', function() {
 
     console.log('\n🚀 INICIALIZANDO GRAN FLORATA DASHBOARD...');
     console.log('═'.repeat(60));
+
+    await loadChargeConfiguration();
 
     const loaded = AppState.load();
 
