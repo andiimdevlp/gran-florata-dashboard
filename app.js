@@ -1524,21 +1524,44 @@ function renderCategoryComparison(month) {
     `;
 }
 
-async function loadSampleData() {
-    const sampleFiles = [
-        'sample-data/Arrecadação 2025 - Jul.txt',
-        'sample-data/Arrecadação 2025 - Ago.txt',
-        'sample-data/Arrecadação 2025 - Set.txt',
-        'sample-data/Arrecadação 2025 - Out.txt',
-        'sample-data/Arrecadação 2025 - Nov.txt',
-        'sample-data/Arrecadação 2025 - Dez.txt',
-        'sample-data/Arrecadação 2026 - Jan.txt',
-        'sample-data/Arrecadação 2026 - Fev.txt',
-        'sample-data/Arrecadação 2026 - Mar.txt',
-        'sample-data/Arrecadação 2026 - Abr.txt'
-    ];
+const fallbackSampleFiles = [
+    'sample-data/Arrecadação 2025 - Jul.txt',
+    'sample-data/Arrecadação 2025 - Ago.txt',
+    'sample-data/Arrecadação 2025 - Set.txt',
+    'sample-data/Arrecadação 2025 - Out.txt',
+    'sample-data/Arrecadação 2025 - Nov.txt',
+    'sample-data/Arrecadação 2025 - Dez.txt',
+    'sample-data/Arrecadação 2026 - Jan.txt',
+    'sample-data/Arrecadação 2026 - Fev.txt',
+    'sample-data/Arrecadação 2026 - Mar.txt',
+    'sample-data/Arrecadação 2026 - Abr.txt'
+];
 
-    console.log('📂 Carregando dados de exemplo...');
+async function getSampleDataFiles() {
+    try {
+        const response = await fetch('sample-data/manifest.json', { cache: 'no-store' });
+        if (!response.ok) {
+            throw new Error(`HTTP ${response.status}`);
+        }
+
+        const manifest = await response.json();
+        const files = Array.isArray(manifest) ? manifest : manifest.files;
+
+        if (Array.isArray(files) && files.length > 0) {
+            return files.map(file => file.startsWith('sample-data/') ? file : `sample-data/${file}`);
+        }
+    } catch (error) {
+        console.warn('Não foi possível carregar sample-data/manifest.json. Usando lista padrão.', error);
+    }
+
+    return fallbackSampleFiles;
+}
+
+async function loadSampleData(options = {}) {
+    const { silent = false } = options;
+    const sampleFiles = await getSampleDataFiles();
+
+    console.log(silent ? '📂 Sincronizando dados do repositório...' : '📂 Carregando dados de exemplo...');
     
     let loadedCount = 0;
     for (const filePath of sampleFiles) {
@@ -1558,7 +1581,7 @@ async function loadSampleData() {
     }
     
     if (loadedCount > 0) {
-        console.log(`✅ ${loadedCount} arquivos de exemplo carregados`);
+        console.log(`✅ ${loadedCount} arquivo(s) sincronizado(s)`);
         updateDashboard();
     }
 }
@@ -1796,6 +1819,7 @@ document.addEventListener('DOMContentLoaded', function() {
         console.log(`\n🎯 O dashboard exibirá: ${latest.month}/${latest.year} (ÚLTIMO MÊS)`);
         console.log('═'.repeat(60) + '\n');
         updateDashboard();
+        loadSampleData({ silent: true });
     } else {
         console.log('ℹ️  Nenhum dado salvo encontrado.');
         console.log('📂 Carregando dados de exemplo para demonstração...');

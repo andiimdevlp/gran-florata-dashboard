@@ -1,0 +1,45 @@
+name: Importar Condobem
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - url.txt
+      - scripts/import-condobem.mjs
+      - .github/workflows/import-condobem.yml
+  schedule:
+    - cron: '0 11 13 * *'
+
+permissions:
+  contents: write
+
+jobs:
+  import-condobem:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Configurar Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Importar balancete da Condobem
+        env:
+          CONDOBEM_CPF: ${{ secrets.CONDOBEM_CPF }}
+        run: node scripts/import-condobem.mjs
+
+      - name: Publicar dados importados
+        run: |
+          if git diff --quiet -- sample-data; then
+            echo "Nenhuma alteração em sample-data."
+            exit 0
+          fi
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add sample-data
+          git commit -m "Atualiza balancete Condobem"
+          git push
